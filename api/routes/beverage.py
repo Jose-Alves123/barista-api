@@ -14,6 +14,13 @@ dynamodb = boto3.client(
     endpoint_url='http://dynamodb-local:8000'
 )
 
+s3 = boto3.client("s3",
+    aws_access_key_id="DUMMYIDEXAMPLE",
+    aws_secret_access_key="DUMMYEXAMPLEKEY",
+    region_name='us-east-1',
+    endpoint_url="http://minio:9000"
+    )
+
 logger = logging.getLogger("uvicorn.error")  # uvicorn logs
 
 @router.get("/", status_code=status.HTTP_200_OK)
@@ -36,6 +43,16 @@ async def get_beverages(beverage : BeverageType | None = None):
         "beverages": response,
         "beverage_list": beverage, 
         "time" : datetime.now()}
+
+@router.get("/image", status_code=status.HTTP_200_OK)
+async def get_image():
+    url = s3.generate_presigned_url('get_object',
+                                Params={
+                                    'Bucket': 'cocktail-api',
+                                    'Key': 'cocktail-default-image.jpg',
+                                },                                  
+                                ExpiresIn=3600)
+    return {"url" : url}
 
 
 @router.get("/{id}", status_code=status.HTTP_200_OK)
