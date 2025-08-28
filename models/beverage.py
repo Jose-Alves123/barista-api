@@ -27,9 +27,6 @@ class Beverage(BaseModel):
     base_beverage: BeverageType | str
     ingredients : list[dict] | None = []
     tags: list[str]
-    default_images : list[str] | None = []
-    sum_score : int | None = 0
-    count_score : int | None = 0
 
     @field_validator("description")
     def validate_description_length(cls, v):
@@ -99,9 +96,8 @@ class Beverage(BaseModel):
                         },
                     ],
                     "default_images" : [],
-                    "sum_score" : 0,
-                    "count_score" : 0
                 }
             ]
         }
     }
+

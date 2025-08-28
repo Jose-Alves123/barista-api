@@ -1,6 +1,8 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, HTTPException, Form
+from typing import Annotated
 from datetime import datetime
 import boto3
+from botocore.exceptions import ClientError
 import logging
 from models.beverage import BeverageType, Beverage
 
@@ -55,12 +57,53 @@ async def get_image():
     return {"url" : url}
 
 
-@router.get("/{id}", status_code=status.HTTP_200_OK)
-async def get_beverage(id : int):
+@router.get("/pk/{pk}/sk/{sk}", status_code=status.HTTP_200_OK)
+async def get_beverage(pk : str, sk : str):
+
+    response = dynamodb.scan(
+        TableName='cocktail-reviewer',
+    FilterExpression="#pk = :val_pk AND #sk = :val_sk",
+    ExpressionAttributeNames={
+        "#pk": "pk",
+        "#sk": "sk"
+    },
+    ExpressionAttributeValues={
+        ":val_pk": {"S": pk},
+        ":val_sk": {"S": sk},
+    }
+    )
+    if response['Count'] != 1:
+        return {
+            "status": 400,
+            "message" : "Error: Not possible to find beverage with given pk and sk"
+        }
+    
+    beverage_type = response["Items"][0]["pk"]["S"].split("#")[1].title()
+    base_beverage = response["Items"][0]["sk"]["S"].split("#")[0].title()
+    name = response["Items"][0]["sk"]["S"].split("#")[1]
+    ingredients = [{
+            "name" : ingredient["M"]["name"]["S"],
+            "quantity" : ingredient["M"]["quantity"]["N"],
+            "quantity_type" : ingredient["M"]["quantity_type"]["S"] 
+        } for ingredient in response["Items"][0]["ingredients"]["L"]
+    ]
+
+    tags = [ tag["S"] for tag in response["Items"][0]["tags"]["L"]]
+
     return {
-        "message": "Hello World", 
-        "id" : id, 
-        "time" : datetime.now()}
+        "message": "Scan complete with success", 
+        "item" : {
+            "beverage_type" : beverage_type,
+            "base_beverage" : base_beverage,
+            "name" : name,
+            "ingredients" : ingredients,
+            "inserted_at" : response["Items"][0]["inserted_at"]["S"],
+            "tags" : tags,
+            "sum_score" : int(response["Items"][0]["sum_score"]["N"]),
+            "count_score" : int(response["Items"][0]["count_score"]["N"]),
+        },
+        "time" : datetime.now()
+        }
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -76,11 +119,12 @@ async def add_beverage(beverage : Beverage):
                 'pk': {'S': pk},
                 'sk': {'S': sk},
                 "tags": {"L": [{"S": tag} for tag in (beverage.tags)]},
-                'default_images' : {'L': [{'S' : img} for img in (beverage.default_images) or []]},
+                'default_image' : {'S': ""},
                 'description': {'S': beverage.description},
                 'sum_score': {'N': str(0)},
                 'count_score': {'N': str(0)},
-                'inserted_at' : {'S' : str(dt)}
+                'inserted_at' : {'S' : str(dt)},
+                'updated_at' : {'S' : str(dt)}
             }
     
     if beverage.beverage_type == BeverageType.COCKTAIL and beverage.ingredients != None:
@@ -118,3 +162,110 @@ async def add_beverage(beverage : Beverage):
         "SK" : sk, 
         "time" : dt
         }
+
+
+# TODO when pk or sk change, must delete previous item and create new one (update then reviews as well)
+@router.put("/pk/{pk}/sk/{sk}")
+async def edit_beverage(pk : str, sk : str,  beverage : Beverage):
+
+    new_pk = f"CATEGORY#{str(beverage.beverage_type).split(".")[1]}"
+    new_sk = f"{str(beverage.base_beverage).split(".")[1] if isinstance(beverage.base_beverage, BeverageType) else beverage.base_beverage}#{beverage.name}"
+    dt = datetime.now()
+
+    item = {
+                'pk': {'S': new_pk},
+                'sk': {'S': new_sk},
+                "tags": {"L": [{"S": tag} for tag in (beverage.tags)]},
+                'description': {'S': beverage.description},
+                'updated_at' : {'S' : str(dt)}
+            }
+    
+    if beverage.beverage_type == BeverageType.COCKTAIL and beverage.ingredients != None:
+        item["ingredients"] = {
+        'L': [
+            {
+                'M': {
+                    'name': {'S': ing["name"]},
+                    'quantity': {'N': str(ing["quantity"])},
+                    'quantity_type': {'S': ing["quantity_type"]}
+                }
+            }
+            for ing in beverage.ingredients
+        ]
+    }
+        
+    update_expression = []
+    expression_attribute_values = {}
+    expression_attribute_names = {}
+
+    if beverage.description:
+        update_expression.append("#desc = :desc")
+        expression_attribute_values[":desc"] = {"S": beverage.description}
+        expression_attribute_names["#desc"] = "description"
+
+    if beverage.tags:
+        update_expression.append("#tags = :tags")
+        expression_attribute_values[":tags"] = {
+            "L": [{"S": tag} for tag in beverage.tags]
+        }
+        expression_attribute_names["#tags"] = "tags"
+
+
+    if beverage.ingredients:
+        update_expression.append("#ingredients = :ings")
+        expression_attribute_values[":ings"] = {
+            "L": [
+                {
+                    "M": {
+                        "name": {"S": ing["name"]},
+                        "quantity": {"N": str(ing["quantity"])},
+                        "quantity_type": {"S": ing["quantity_type"]},
+                    }
+                }
+                for ing in beverage.ingredients
+            ]
+        }
+        expression_attribute_names["#ingredients"] = "ingredients"
+
+    update_expression.append("#updated_at = :dt")
+    expression_attribute_values[":dt"] = {"S": str(dt)}
+    expression_attribute_names["#updated_at"] = "updated_at"
+        
+    try:
+        response = dynamodb.update_item(
+        TableName="cocktail-reviewer",
+        Key={"pk": {"S": new_pk}, "sk": {"S": new_sk}},
+        UpdateExpression="SET " + ", ".join(update_expression),
+        ExpressionAttributeValues=expression_attribute_values,
+        ExpressionAttributeNames=expression_attribute_names,
+        ConditionExpression="attribute_exists(pk) AND attribute_exists(sk)", 
+        ReturnValues="ALL_NEW" 
+    )
+
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            logger.warning("Item does not exist, cannot update")
+        raise HTTPException(status_code=404, detail="Item not found to update. Aborted.")
+    
+    return {"beverage": response}
+
+@router.delete("/pk/{pk}/sk/{sk}", status_code=status.HTTP_202_ACCEPTED)
+async def delete_beverage(pk : str, sk : str):
+    response = dynamodb.delete_item(
+        TableName='cocktail-reviewer',
+        Key={
+            "pk": {"S": pk},
+            "sk": {"S": sk}
+        },
+        ReturnValues="ALL_OLD"
+    )
+
+    if not "Attributes" in response:
+        raise HTTPException(status_code=404, detail="Item not found to delete")
+    
+    return {
+        "status": 204, 
+        "message": "Item deleted",
+        "item" : response["Attributes"],
+        "time": datetime.now()
+    }
