@@ -78,8 +78,8 @@ class Beverage(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "name": "GinFizz",
-                    "description": "The best Giz Fizz in the world",
+                    "name": "Gin Fizz",
+                    "description": "The best Gin Fizz in the world",
                     "beverage_type": BeverageType.COCKTAIL,
                     "base_beverage" : BeverageType.GIN,
                     "tags" : ["hello", "world"],
@@ -94,8 +94,7 @@ class Beverage(BaseModel):
                             "quantity": 2, 
                             "quantity_type": "cups"
                         },
-                    ],
-                    "default_images" : [],
+                    ]
                 }
             ]
         }
