@@ -30,7 +30,6 @@ class Beverage(BaseModel):
 
     @field_validator("description")
     def validate_description_length(cls, v):
-        logger.info("Hello from validate_description_length")
         if len(v) < 10 or len(v) > 500:
             raise ValueError("Description field must have between 10 and 500 characters")
         
@@ -38,9 +37,6 @@ class Beverage(BaseModel):
 
     @model_validator(mode='after')
     def validate_base_beverage(self):
-        logger.info(self.base_beverage)
-        logger.info( self.beverage_type)
-
         if self.beverage_type.value != BeverageType.COCKTAIL.value and isinstance(self.base_beverage, BeverageType):
             raise ValueError("A non cocktail beverage must nor have any base beverage.")
         

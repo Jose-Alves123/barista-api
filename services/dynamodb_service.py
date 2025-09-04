@@ -1,21 +1,34 @@
-import boto3
+import boto3, os
 from botocore.exceptions import ClientError
 from models.beverage import Beverage
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 from datetime import datetime
+import logging
+
+logger = logging.getLogger("uvicorn.error")  # uvicorn logs
 
 
 __dynamodb = boto3.client(
-    'dynamodb',
-    region_name='us-east-1',          
-    aws_access_key_id='jpex1e', 
-    aws_secret_access_key='ghzxqt',  
-    endpoint_url='http://dynamodb-local:8000'
+    "dynamodb",
+    region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+    endpoint_url=os.getenv("DYNAMODB_ENDPOINT_URL") 
 )
 
-def get_beverages(pk : str = ""):
+def get_beverages(pk : str = "") -> Dict:
+    """"
+    Get the beverages base on the if argumennt pk fits with the beggining of
+    the tables primary key.
+
+    Args
+        pk (str) default empty string : condition to check begining of pk in table and
+        retrieve those items that match
+
+    Returns
+        Response to dynamodb
+    """
+
     response = __dynamodb.scan(
-        TableName='cocktail-reviewer',
+        TableName=os.getenv("DB"),
         FilterExpression="begins_with(#pk, :val)",
         ExpressionAttributeNames={
             "#pk": "pk"
@@ -27,8 +40,19 @@ def get_beverages(pk : str = ""):
     return response
 
 def get_beverage(pk : str, sk : str) -> Tuple[int, Dict]:
+    """"
+    Get the beverage based on the if argumennt pk and sk. Only one item can fit condition
+
+    Args
+        pk (str) default : condition to check pk in table
+        sk (str) default : condition to check sk in table
+
+    Returns
+        Response to dynamodb
+    """
+
     response : Dict = __dynamodb.scan(
-        TableName='cocktail-reviewer',
+        TableName=os.getenv("DB"),
         FilterExpression="#pk = :val_pk AND #sk = :val_sk",
         ExpressionAttributeNames={
             "#pk": "pk",
@@ -39,15 +63,30 @@ def get_beverage(pk : str, sk : str) -> Tuple[int, Dict]:
             ":val_sk": {"S": sk},
         }
     )
+
+    logger.info(response)
     if response['Count'] != 1:
-        return (400, {"message" : "Error: Not possible to find beverage with given pk and sk"})
+        return (404, {"message" : "Error: Not possible to find beverage with given pk and sk"})
     
     return (200, response)
 
 def put_beverage(item) -> Tuple[int, Dict]:
+    """"
+    Add the new beverage to dynamodb.
+
+    Args
+        item (dict): prepared item to add to dynamodb
+
+    Condition:
+        No item must be in dynamodb that match the pk and sk from argument item
+
+    Returns
+        Response from dynamodb
+    """
+
     try:
         response = __dynamodb.put_item(
-            TableName='cocktail-reviewer',
+            TableName=os.getenv("DB"),
             Item=item,
             ConditionExpression="attribute_not_exists(pk) AND attribute_not_exists(sk)"
         )
@@ -58,8 +97,21 @@ def put_beverage(item) -> Tuple[int, Dict]:
     return (201, {"item": response })
 
 def delete_beverage(pk : str, sk : str) -> Tuple[int, Dict]:
+    """"
+    Delete beverage with sk and pk from dynamodb.
+
+    Args
+        pk (str): primary key
+        sk (str): sort key
+
+    Condition:
+       An item must be in dynamodb that match the pk and sk from argument item
+
+    Returns
+        Response from dynamodb
+    """
     response = __dynamodb.delete_item(
-        TableName='cocktail-reviewer',
+        TableName=os.getenv("DB"),
         Key={
             "pk": {"S": pk},
             "sk": {"S": sk}
@@ -72,11 +124,23 @@ def delete_beverage(pk : str, sk : str) -> Tuple[int, Dict]:
     
     return (204, response["Attributes"])
 
-
 def edit_beverage(pk : str, sk : str, update_expression, expression_attribute_values, expression_attribute_names)-> Tuple[int, Dict]:
+    """"
+    Edit beverage to dynamodb.
+
+    Args
+        item (dict): prepared item to edit to dynamodb
+
+    Condition:
+        Anitem must be in dynamodb that match the pk and sk from argument item
+
+    Returns
+        Response from dynamodb
+    """
+    
     try:
         response = __dynamodb.update_item(
-            TableName="cocktail-reviewer",
+            TableName=os.getenv("DB"),
             Key={"pk": {"S": pk}, "sk": {"S": sk}},
             UpdateExpression="SET " + ", ".join(update_expression),
             ExpressionAttributeValues=expression_attribute_values,
@@ -86,11 +150,22 @@ def edit_beverage(pk : str, sk : str, update_expression, expression_attribute_va
         )
 
     except ClientError as e:
-        return (404, {"message" : "Item not found to update. Aborted."})
+        logger.info(e)
+        return (409, {"message" : "Item not found to update. Aborted."})
     
     return (200, {"beverage": response})
 
 def set_expression_to_edit_beverage(b : Beverage):
+    """"
+    Set expressions to edit existing item in dynamodb
+
+    Args
+        b (Beverage): beverage item to edit certain attributes
+
+    Returns
+        tuple with (update_expression, expression_attribute_names, expression_attribute_values)
+    """
+
     update_expression = []
     expression_attribute_values = {}
     expression_attribute_names = {}
