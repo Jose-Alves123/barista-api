@@ -1,0 +1,61 @@
+version: '3.8'
+services:
+  dynamodb-local:
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    image: "amazon/dynamodb-local:latest"
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./docker/dynamodb:/home/dynamodblocal/data"
+    working_dir: /home/dynamodblocal
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server --console-address ":9090" /data
+    ports:
+      - "9000:9000" 
+      - "9090:9090"   
+    environment:
+      - MINIO_ROOT_USER=${AWS_ACCESS_KEY_ID}
+      - MINIO_ROOT_PASSWORD=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - "./docker/minio:/data"
+
+  barista-api:  
+    depends_on:
+      - dynamodb-local
+      - minio
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: barista-api
+    ports:
+     - "8080:8000" 
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_REGION_NAME}
+      - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - DB=${DEV_DB}
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: barista-tests
+    command: pytest -v -vv --disable-warnings
+    volumes:
+      - .:/app
+    depends_on:
+      - dynamodb-local
+      - minio
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_REGION_NAME}
+      - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - DB=${TEST_DB}
