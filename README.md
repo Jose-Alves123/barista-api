@@ -71,6 +71,6 @@ These are the current endpoints in the API
 - ✅ CRUD operations with different beverages
 - ✅ Filter between kind of beverage (Cocktail, Gin, etc)
 - ✅ Obtain default image if no image is set for beverage
-- ❌ Allow to review beverages
-- ❌ Add images to each reviews
+- ✅ Allow to review beverages
+- ✅ Add images to each reviews
 - ❌ Set default image to cocktail from list of reviews

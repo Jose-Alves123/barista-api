@@ -2,7 +2,7 @@ from datetime import datetime
 from models.beverage import Beverage
 from typing import List, Dict
 
-
+# TODO change name to get_item
 def get_beverage(b : List[Dict] | Dict, item_key : str = "items"):
     """"
     Get the JSON based dictionary of response to API call.
