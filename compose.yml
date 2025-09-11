@@ -40,6 +40,7 @@ services:
       - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
       - DB=${DEV_DB}
+      - BUCKET_NAME=${BUCKET_NAME}
 
   tests:
     build:
@@ -59,3 +60,4 @@ services:
       - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
       - DB=${TEST_DB}
+      - BUCKET_NAME=${BUCKET_NAME}

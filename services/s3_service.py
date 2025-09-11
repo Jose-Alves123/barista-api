@@ -1,8 +1,7 @@
-import boto3, os, logging, io
+import boto3, os, io
 from fastapi import UploadFile
-from typing import Tuple, List, Dict
+import os
 
-logger = logging.getLogger("uvicorn.error")  # uvicorn logs
 
 __s3 = boto3.client(
     "s3",
@@ -11,52 +10,66 @@ __s3 = boto3.client(
 )
 
 def get_image(img : str = 'cocktail-default-image.jpg'):
-    """"
+    """
     Get presigned url from S3 object. If no str is provided, default image presigned
     url is obtained
 
     Args:
-        img (str) default empty string - name of object in s3
+        img (str) default - cocktail-default-image.jpg is default image in bucket for beverages without image
     
     Returns:
         str of presigned url
     """
     url = __s3.generate_presigned_url('get_object',
                                 Params={
-                                    'Bucket': 'cocktail-api',
+                                    'Bucket': os.getenv("BUCKET_NAME"),
                                     'Key': img,
                                 },                                  
                                 ExpiresIn=3600)
     return url
 
+def upload_image(file: UploadFile, object_name: str) -> int:
+    """
+    Upload image to bucket.
 
-def upload_image(file: UploadFile, bucket : str, object_name: str) -> int:
+    Args:
+        file (UploadFile) - file to upload to S3
+        object_name - name of the new object in S3
+    
+    Returns:
+        int confirming status, 200 is success, 500 is insuccess.
+    """
     temp_file = io.BytesIO()
     status = 200
     try:
-        logger.info("Start uploading file to S3")
         contents = file.file.read()
-        
         temp_file.write(contents)
         temp_file.seek(0)
-        __s3.upload_fileobj(temp_file, bucket, object_name)
+        __s3.upload_fileobj(temp_file, os.getenv("BUCKET_NAME"), object_name)
     except Exception as e:
-        logger.info("Failed to add to S3")
         status = 500
     finally:
         temp_file.close()
     
     return status
 
-def delete_image(obj_name : str, bucket: str) -> int:
+def delete_image(obj_name : str) -> int:
+    """
+    Delete image from bucket
+
+    Args:
+        object_name - name of the object in S3
+    
+    Returns:
+        int confirming status, 200 is success, 500 is insuccess.
+    """
     status = 200
     try:
         __s3.delete_object(
-            Bucket=bucket,
+            Bucket=os.getenv("BUCKET_NAME"),
             Key=obj_name
         )
     except Exception as e:
-        logger.info("Failed to delete file")
         status = 500
 
     return status

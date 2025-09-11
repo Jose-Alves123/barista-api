@@ -51,6 +51,8 @@ To run test simply start the docker compose and in the beggining the tests will 
 
 A set of environment variables are necessary to run the project locally. Copy .env.example file to .env and create your own variables. You don't need to have valid access keys to run locally. Just create a random set of characters. For aws_secret_access_key, make sure to be at least 8 characters long, as minio requires it.
 
+Please make sure to create the DynamoDB table in DynamoDB-local and the minio bucket in minio GUI. Set the name of both in the .env file for connection.
+
 # Endpoints
 
 These are the current endpoints in the API

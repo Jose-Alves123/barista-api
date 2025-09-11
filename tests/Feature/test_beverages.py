@@ -259,7 +259,7 @@ def test_edit_cocktail_beverage_success():
     assert response.status_code == 200
 
     data = response.json()
-    assert data["items"]['description'] == f"The worst {name} in the world!"
+    assert data["item"]['description'] == f"The worst {name} in the world!"
 
     client.delete(f"/beverages/pk/{pk}/sk/{sk}")
     
